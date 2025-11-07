@@ -148,71 +148,41 @@ bool WireGuardIntegration::Connect() {
     }
 
     try {
-        // Создаем конфигурацию во временном файле
-        path tempPath = std::filesystem::temp_directory_path();
-        std::string configPath = (tempPath / "freedom_vpn_temp.conf").string();
+        std::wstring wgPath = L"C:\\Program Files\\WireGuard\\wireguard.exe";
 
-        if (!SaveConfigToFile(configPath)) {
+        if (GetFileAttributesW(wgPath.c_str()) == INVALID_FILE_ATTRIBUTES) {
             return false;
         }
 
-        // Используем правильный путь к WireGuard и команду установки туннеля
-        std::string wgPath = "C:\\Program Files\\WireGuard\\wireguard.exe";
-        std::string command = "\"" + wgPath + "\" /installtunnelservice \"" + configPath + "\"";
+        wchar_t tempPathBuffer[MAX_PATH];
+        GetTempPathW(MAX_PATH, tempPathBuffer);
+        std::wstring tempPath(tempPathBuffer);
+        std::wstring configPath = tempPath + L"FreedomVPN.conf";
 
-        STARTUPINFOA si = { sizeof(STARTUPINFOA) };
-        si.dwFlags = STARTF_USESHOWWINDOW;
-        si.wShowWindow = SW_HIDE;
-        PROCESS_INFORMATION pi;
-
-        // Пробуем установить туннель через WireGuard
-        bool processStarted = CreateProcessA(
-            NULL,
-            (LPSTR)command.c_str(),
-            NULL,
-            NULL,
-            FALSE,
-            CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT,
-            NULL,
-            NULL,
-            &si,
-            &pi
-        );
-
-        // Если не получилось - пробуем альтернативный метод через wg-quick
-        if (!processStarted) {
-            std::string altCommand = "wg-quick up \"" + configPath + "\"";
-
-            processStarted = CreateProcessA(
-                NULL,
-                (LPSTR)altCommand.c_str(),
-                NULL,
-                NULL,
-                FALSE,
-                CREATE_NO_WINDOW,
-                NULL,
-                NULL,
-                &si,
-                &pi
-            );
-
-            if (!processStarted) {
-                return false;
-            }
+        std::string configPathA(configPath.begin(), configPath.end());
+        if (!SaveConfigToFile(configPathA)) {
+            return false;
         }
 
-        // Ждем завершения процесса (таймаут 30 секунд)
-        DWORD waitResult = WaitForSingleObject(pi.hProcess, 30000);
+        std::wstring params = L"/installtunnelservice \"" + configPath + L"\"";
 
-        DWORD exitCode = 1;
-        if (waitResult == WAIT_OBJECT_0) {
-            GetExitCodeProcess(pi.hProcess, &exitCode);
+        SHELLEXECUTEINFOW sei = { 0 };
+        sei.cbSize = sizeof(SHELLEXECUTEINFOW);
+        sei.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC;
+        sei.lpVerb = L"runas";
+        sei.lpFile = wgPath.c_str();
+        sei.lpParameters = params.c_str();
+        sei.nShow = SW_HIDE;
+
+        if (!ShellExecuteExW(&sei)) {
+            return false;
         }
 
-        CloseHandle(pi.hProcess);
-        CloseHandle(pi.hThread);
+        if (sei.hProcess) {
+            WaitForSingleObject(sei.hProcess, 10000);
+            CloseHandle(sei.hProcess);
+        }
 
-        // Даём время на установку соединения
         Sleep(2000);
 
         isConnected = true;
@@ -230,63 +200,29 @@ bool WireGuardIntegration::Disconnect() {
     }
 
     try {
-        // Используем имя туннеля из файла конфигурации
-        path tempPath = std::filesystem::temp_directory_path();
-        std::string configPath = (tempPath / "freedom_vpn_temp.conf").string();
+        std::wstring wgPath = L"C:\\Program Files\\WireGuard\\wireguard.exe";
+        std::wstring tunnelName = L"FreedomVPN";
+        std::wstring params = L"/uninstalltunnelservice \"" + tunnelName + L"\"";
 
-        std::string tunnelName = "freedom_vpn_temp";
+        SHELLEXECUTEINFOW sei = { 0 };
+        sei.cbSize = sizeof(SHELLEXECUTEINFOW);
+        sei.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC;
+        sei.lpVerb = L"runas";
+        sei.lpFile = wgPath.c_str();
+        sei.lpParameters = params.c_str();
+        sei.nShow = SW_HIDE;
 
-        // Формируем команду удаления сервиса
-        std::string wgPath = "C:\\Program Files\\WireGuard\\wireguard.exe";
-        std::string command = "\"" + wgPath + "\" /uninstalltunnelservice \"" + tunnelName + "\"";
-
-        STARTUPINFOA si = { sizeof(STARTUPINFOA) };
-        si.dwFlags = STARTF_USESHOWWINDOW;
-        si.wShowWindow = SW_HIDE;
-        PROCESS_INFORMATION pi;
-
-        // Пробуем удалить туннель
-        bool processStarted = CreateProcessA(
-            NULL,
-            (LPSTR)command.c_str(),
-            NULL,
-            NULL,
-            FALSE,
-            CREATE_NO_WINDOW,
-            NULL,
-            NULL,
-            &si,
-            &pi
-        );
-
-        // Альтернативный метод через wg-quick
-        if (!processStarted) {
-            std::string altCommand = "wg-quick down \"" + configPath + "\"";
-
-            processStarted = CreateProcessA(
-                NULL,
-                (LPSTR)altCommand.c_str(),
-                NULL,
-                NULL,
-                FALSE,
-                CREATE_NO_WINDOW,
-                NULL,
-                NULL,
-                &si,
-                &pi
-            );
+        if (!ShellExecuteExW(&sei)) {
+            isConnected = false;
+            return false;
         }
 
-        if (processStarted) {
-            // Ждем завершения процесса
-            WaitForSingleObject(pi.hProcess, 10000);
-
-            DWORD exitCode;
-            GetExitCodeProcess(pi.hProcess, &exitCode);
-
-            CloseHandle(pi.hProcess);
-            CloseHandle(pi.hThread);
+        if (sei.hProcess) {
+            WaitForSingleObject(sei.hProcess, 10000);
+            CloseHandle(sei.hProcess);
         }
+
+        Sleep(1000);
 
         isConnected = false;
         return true;
@@ -299,7 +235,35 @@ bool WireGuardIntegration::Disconnect() {
 
 // Проверка статуса подключения
 bool WireGuardIntegration::IsConnected() const {
-    return isConnected;
+    try {
+        SC_HANDLE scManager = OpenSCManagerW(NULL, NULL, SC_MANAGER_CONNECT);
+        if (!scManager) {
+            return isConnected;
+        }
+
+        SC_HANDLE service = OpenServiceW(scManager, L"WireGuardTunnel$FreedomVPN", SERVICE_QUERY_STATUS);
+        if (!service) {
+            CloseServiceHandle(scManager);
+            return false;
+        }
+
+        SERVICE_STATUS_PROCESS status = { 0 };
+        DWORD bytesNeeded = 0;
+
+        bool running = false;
+        if (QueryServiceStatusEx(service, SC_STATUS_PROCESS_INFO,
+            (LPBYTE)&status, sizeof(SERVICE_STATUS_PROCESS), &bytesNeeded)) {
+            running = (status.dwCurrentState == SERVICE_RUNNING);
+        }
+
+        CloseServiceHandle(service);
+        CloseServiceHandle(scManager);
+
+        return running;
+    }
+    catch (...) {
+        return isConnected;
+    }
 }
 
 // Получение информации о подключении
