@@ -11,8 +11,12 @@
 #include <sstream>
 #include <cmath>
 #include <dwmapi.h>
+#include <gdiplus.h>
 
 #pragma comment(lib, "dwmapi.lib")
+#pragma comment(lib, "gdiplus.lib")
+
+using namespace Gdiplus;
 
 #define MAX_LOADSTRING 100
 #define IDC_CONNECT_BUTTON 1001
@@ -89,7 +93,6 @@ HFONT g_hStatusFont;
 HFONT g_hSmallFont;
 HFONT g_hMonoFont;
 HBITMAP g_hGermanyFlag;
-HBITMAP g_hShieldIcon;
 HBITMAP g_hAppIcon;
 
 ATOM MyRegisterClass(HINSTANCE hInstance);
@@ -109,8 +112,8 @@ void UpdateConnectionTimer();
 void UpdateTrafficStats();
 void ToggleConnection();
 HBITMAP CreateFlagBitmap();
-HBITMAP CreateShieldBitmap();
 HBITMAP CreateAppIcon();
+void DrawVectorShield(Graphics* graphics, int centerX, int centerY, bool isActive);
 void DrawBitmap(HDC hdc, HBITMAP hBitmap, int x, int y, int width, int height);
 std::wstring FormatBytes(uint64_t bytes);
 void MakeWindowRounded();
@@ -125,6 +128,10 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 {
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
+
+    GdiplusStartupInput gdiplusStartupInput;
+    ULONG_PTR gdiplusToken;
+    GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
 
     INITCOMMONCONTROLSEX icc;
     icc.dwSize = sizeof(INITCOMMONCONTROLSEX);
@@ -154,6 +161,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     }
 
     CleanupUI();
+
+    GdiplusShutdown(gdiplusToken);
 
     return (int)msg.wParam;
 }
@@ -203,7 +212,6 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
     g_hMonoFont = CreateCustomFont(L"Consolas", 11);
 
     g_hGermanyFlag = CreateFlagBitmap();
-    g_hShieldIcon = CreateShieldBitmap();
     g_hAppIcon = CreateAppIcon();
 
     InitializeUI();
@@ -302,7 +310,6 @@ void CleanupUI() {
     DeleteObject(g_hMonoFont);
 
     DeleteObject(g_hGermanyFlag);
-    DeleteObject(g_hShieldIcon);
     DeleteObject(g_hAppIcon);
 
     KillTimer(g_hWnd, ID_CONNECTION_TIMER);
@@ -421,116 +428,182 @@ void DrawTitleBar(HDC hdc) {
     DeleteObject(iconFont);
 }
 
+void DrawVectorShield(Graphics* graphics, int centerX, int centerY, bool isActive) {
+    int shieldSize = 48;
+    int halfSize = shieldSize / 2;
+
+    PointF shieldPoints[6] = {
+        PointF((REAL)centerX, (REAL)(centerY - halfSize + 4)),
+        PointF((REAL)(centerX + halfSize - 4), (REAL)(centerY - halfSize / 2 + 6)),
+        PointF((REAL)(centerX + halfSize - 4), (REAL)(centerY + halfSize / 2 - 6)),
+        PointF((REAL)centerX, (REAL)(centerY + halfSize - 4)),
+        PointF((REAL)(centerX - halfSize + 4), (REAL)(centerY + halfSize / 2 - 6)),
+        PointF((REAL)(centerX - halfSize + 4), (REAL)(centerY - halfSize / 2 + 6))
+    };
+
+    GraphicsPath shieldPath;
+    shieldPath.AddPolygon(shieldPoints, 6);
+
+    PathGradientBrush shieldBrush(&shieldPath);
+    Color centerColor(255, 198, 207, 218);
+    Color edgeColor(255, 170, 181, 194);
+    shieldBrush.SetCenterColor(centerColor);
+    int colorCount = 1;
+    shieldBrush.SetSurroundColors(&edgeColor, &colorCount);
+
+    graphics->FillPath(&shieldBrush, &shieldPath);
+
+    if (isActive) {
+        Pen outlinePen(Color(255, 0, 255, 183), 2.0f);
+        graphics->DrawPath(&outlinePen, &shieldPath);
+    } else {
+        Pen outlinePen(Color(120, 198, 207, 218), 1.5f);
+        graphics->DrawPath(&outlinePen, &shieldPath);
+    }
+}
+
 void DrawConnectButton(HDC hdc, RECT* pRect) {
+    Graphics graphics(hdc);
+    graphics.SetSmoothingMode(SmoothingModeHighQuality);
+    graphics.SetCompositingMode(CompositingModeSourceOver);
+    graphics.SetCompositingQuality(CompositingQualityHighQuality);
+
     int centerX = (pRect->left + pRect->right) / 2;
     int centerY = (pRect->top + pRect->bottom) / 2;
     int baseRadius = 75;
 
     COLORREF mainColor, glowColor;
+    bool showGlow = false;
 
     if (isConnected) {
         mainColor = COLOR_SUCCESS;
-        glowColor = RGB(20, 150, 60);
+        glowColor = COLOR_NEON_TEAL;
+        showGlow = true;
     }
     else if (isConnecting) {
         int pulse = (int)(15 * sin(animationPhase * 3.14159 * 2));
         mainColor = RGB(0 + pulse, 207 + pulse, 255);
         glowColor = COLOR_NEON_CYAN;
+        showGlow = true;
     }
     else {
-        mainColor = isConnectHover ? COLOR_DISCONNECTED_HOVER : COLOR_DISCONNECTED;
-        glowColor = RGB(40, 50, 65);
+        mainColor = isConnectHover ? COLOR_DISCONNECTED_HOVER : RGB(60, 70, 88);
+        glowColor = isConnectHover ? COLOR_NEON_CYAN : RGB(40, 50, 65);
+        showGlow = isConnectHover;
     }
 
-    if (isConnected || isConnecting) {
-        int pulseOffset = (int)(6 * sin(animationPhase * 3.14159 * 2));
+    if (showGlow) {
+        int pulseOffset = (int)(8 * sin(animationPhase * 3.14159 * 2));
 
-        for (int i = 5; i >= 0; i--) {
-            int alpha = 35 - (i * 5);
-            if (alpha < 5) alpha = 5;
+        for (int i = 6; i >= 0; i--) {
+            int alpha = 45 - (i * 6);
+            if (alpha < 8) alpha = 8;
 
-            int r = (GetRValue(glowColor) * alpha) / 100;
-            int g = (GetGValue(glowColor) * alpha) / 100;
-            int b = (GetBValue(glowColor) * alpha) / 100;
+            int glowRadius = baseRadius + 18 + (i * 5) + pulseOffset;
+            RectF glowRect(
+                (REAL)(centerX - glowRadius),
+                (REAL)(centerY - glowRadius),
+                (REAL)(glowRadius * 2),
+                (REAL)(glowRadius * 2)
+            );
 
-            HPEN glowPen = CreatePen(PS_SOLID, 3, RGB(r, g, b));
-            HPEN oldPen = (HPEN)SelectObject(hdc, glowPen);
-            SelectObject(hdc, GetStockObject(NULL_BRUSH));
+            GraphicsPath glowPath;
+            glowPath.AddEllipse(glowRect);
 
-            int glowRadius = baseRadius + 12 + (i * 4) + pulseOffset;
-            Ellipse(hdc, centerX - glowRadius, centerY - glowRadius,
-                centerX + glowRadius, centerY + glowRadius);
+            PathGradientBrush glowBrush(&glowPath);
+            Color glowCenter(alpha, GetRValue(glowColor), GetGValue(glowColor), GetBValue(glowColor));
+            Color glowEdge(0, 0, 0, 0);
+            glowBrush.SetCenterColor(glowCenter);
+            int colorCount = 1;
+            glowBrush.SetSurroundColors(&glowEdge, &colorCount);
 
-            SelectObject(hdc, oldPen);
-            DeleteObject(glowPen);
+            graphics.FillEllipse(&glowBrush, glowRect);
         }
     }
 
-    for (int i = 0; i < baseRadius; i++) {
-        float ratio = (float)i / baseRadius;
-        int r = GetRValue(COLOR_GLASS) + (int)((GetRValue(mainColor) - GetRValue(COLOR_GLASS)) * ratio);
-        int g = GetGValue(COLOR_GLASS) + (int)((GetGValue(mainColor) - GetGValue(COLOR_GLASS)) * ratio);
-        int b = GetBValue(COLOR_GLASS) + (int)((GetBValue(mainColor) - GetBValue(COLOR_GLASS)) * ratio);
+    RectF buttonRect(
+        (REAL)(centerX - baseRadius),
+        (REAL)(centerY - baseRadius),
+        (REAL)(baseRadius * 2),
+        (REAL)(baseRadius * 2)
+    );
 
-        HBRUSH layerBrush = CreateSolidBrush(RGB(r, g, b));
-        HPEN layerPen = CreatePen(PS_SOLID, 1, RGB(r, g, b));
-        SelectObject(hdc, layerBrush);
-        SelectObject(hdc, layerPen);
+    GraphicsPath buttonPath;
+    buttonPath.AddEllipse(buttonRect);
 
-        int currentRadius = baseRadius - i;
-        Ellipse(hdc, centerX - currentRadius, centerY - currentRadius,
-            centerX + currentRadius, centerY + currentRadius);
+    PathGradientBrush buttonBrush(&buttonPath);
+    Color outerColor(255, GetRValue(mainColor), GetGValue(mainColor), GetBValue(mainColor));
+    Color innerColor(255, GetRValue(COLOR_GLASS), GetGValue(COLOR_GLASS), GetBValue(COLOR_GLASS));
+    buttonBrush.SetCenterColor(innerColor);
+    int colorCount = 1;
+    buttonBrush.SetSurroundColors(&outerColor, &colorCount);
 
-        DeleteObject(layerBrush);
-        DeleteObject(layerPen);
-    }
+    graphics.FillEllipse(&buttonBrush, buttonRect);
+
+    RectF innerShadowRect(
+        (REAL)(centerX - baseRadius + 5),
+        (REAL)(centerY - baseRadius + 5),
+        (REAL)(baseRadius * 2 - 10),
+        (REAL)(baseRadius * 2 - 10)
+    );
+
+    GraphicsPath innerShadowPath;
+    innerShadowPath.AddEllipse(innerShadowRect);
+
+    PathGradientBrush shadowBrush(&innerShadowPath);
+    Color shadowCenter(0, 0, 0, 0);
+    Color shadowEdge(50, 0, 0, 0);
+    shadowBrush.SetCenterColor(shadowCenter);
+    shadowBrush.SetSurroundColors(&shadowEdge, &colorCount);
+
+    graphics.FillEllipse(&shadowBrush, innerShadowRect);
 
     if (isConnecting) {
-        HPEN rotatingPen = CreatePen(PS_SOLID, 4, COLOR_NEON_TEAL);
-        HPEN oldPen = (HPEN)SelectObject(hdc, rotatingPen);
-        SelectObject(hdc, GetStockObject(NULL_BRUSH));
-
         for (int i = 0; i < 4; i++) {
             float startAngle = rotationAngle + (i * 90.0f);
-            float endAngle = startAngle + 50.0f;
+            float sweepAngle = 50.0f;
 
-            int arcRadius = baseRadius + 6;
-            POINT arcStart = {
-                centerX + (int)(arcRadius * cos(startAngle * 3.14159f / 180.0f)),
-                centerY + (int)(arcRadius * sin(startAngle * 3.14159f / 180.0f))
-            };
+            int arcRadius = baseRadius + 8;
+            RectF arcRect(
+                (REAL)(centerX - arcRadius),
+                (REAL)(centerY - arcRadius),
+                (REAL)(arcRadius * 2),
+                (REAL)(arcRadius * 2)
+            );
 
-            MoveToEx(hdc, arcStart.x, arcStart.y, NULL);
-
-            for (float angle = startAngle; angle <= endAngle; angle += 2.5f) {
-                int x = centerX + (int)(arcRadius * cos(angle * 3.14159f / 180.0f));
-                int y = centerY + (int)(arcRadius * sin(angle * 3.14159f / 180.0f));
-                LineTo(hdc, x, y);
-            }
+            Pen arcPen(Color(255, 0, 255, 183), 4.0f);
+            arcPen.SetLineCap(LineCapRound, LineCapRound, DashCapRound);
+            graphics.DrawArc(&arcPen, arcRect, startAngle, sweepAngle);
         }
-
-        SelectObject(hdc, oldPen);
-        DeleteObject(rotatingPen);
     }
 
-    DrawBitmap(hdc, g_hShieldIcon, centerX - 24, centerY - 32, 48, 48);
+    DrawVectorShield(&graphics, centerX, centerY, isConnected || isConnecting);
 
     SetBkMode(hdc, TRANSPARENT);
-    SetTextColor(hdc, COLOR_TEXT_PRIMARY);
     HFONT oldFont = (HFONT)SelectObject(hdc, g_hButtonFont);
 
     std::wstring buttonText;
+    COLORREF textColor = COLOR_TEXT_PRIMARY;
+
     if (isConnecting) {
         buttonText = L"Connecting";
+        textColor = COLOR_NEON_CYAN;
     }
     else if (isConnected) {
         buttonText = L"Disconnect";
+        textColor = COLOR_SUCCESS;
     }
     else {
         buttonText = L"Connect";
+        textColor = isConnectHover ? COLOR_NEON_CYAN : COLOR_TEXT_PRIMARY;
     }
 
-    RECT textRect = { pRect->left, centerY + 30, pRect->right, pRect->bottom };
+    RECT shadowRect = { pRect->left, centerY + 91, pRect->right, pRect->bottom };
+    SetTextColor(hdc, RGB(0, 0, 0));
+    DrawTextW(hdc, buttonText.c_str(), -1, &shadowRect, DT_CENTER);
+
+    RECT textRect = { pRect->left, centerY + 90, pRect->right, pRect->bottom };
+    SetTextColor(hdc, textColor);
     DrawTextW(hdc, buttonText.c_str(), -1, &textRect, DT_CENTER);
 
     SelectObject(hdc, oldFont);
@@ -590,41 +663,6 @@ HBITMAP CreateFlagBitmap() {
     return hBitmap;
 }
 
-HBITMAP CreateShieldBitmap() {
-    HDC hdcScreen = GetDC(NULL);
-    HDC hdcMem = CreateCompatibleDC(hdcScreen);
-    HBITMAP hBitmap = CreateCompatibleBitmap(hdcScreen, 48, 48);
-    HBITMAP hOldBitmap = (HBITMAP)SelectObject(hdcMem, hBitmap);
-
-    RECT bmpRect = { 0, 0, 48, 48 };
-    FillRect(hdcMem, &bmpRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
-
-    HPEN hPen = CreatePen(PS_SOLID, 2, RGB(200, 210, 220));
-    HPEN hOldPen = (HPEN)SelectObject(hdcMem, hPen);
-    HBRUSH hBrush = CreateSolidBrush(RGB(170, 190, 210));
-    HBRUSH hOldBrush = (HBRUSH)SelectObject(hdcMem, hBrush);
-
-    POINT shield[7] = {
-        {24, 4}, {44, 14}, {44, 28}, {24, 44}, {4, 28}, {4, 14}, {24, 4}
-    };
-    Polyline(hdcMem, shield, 7);
-
-    HRGN hRgn = CreatePolygonRgn(shield, 6, ALTERNATE);
-    FillRgn(hdcMem, hRgn, hBrush);
-
-    SelectObject(hdcMem, hOldPen);
-    SelectObject(hdcMem, hOldBrush);
-    SelectObject(hdcMem, hOldBitmap);
-
-    DeleteObject(hPen);
-    DeleteObject(hBrush);
-    DeleteObject(hRgn);
-    DeleteDC(hdcMem);
-    ReleaseDC(NULL, hdcScreen);
-
-    return hBitmap;
-}
-
 HBITMAP CreateAppIcon() {
     HDC hdcScreen = GetDC(NULL);
     HDC hdcMem = CreateCompatibleDC(hdcScreen);
@@ -632,7 +670,9 @@ HBITMAP CreateAppIcon() {
     HBITMAP hOldBitmap = (HBITMAP)SelectObject(hdcMem, hBitmap);
 
     RECT bmpRect = { 0, 0, 18, 18 };
-    FillRect(hdcMem, &bmpRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
+    HBRUSH hHeaderBrush = CreateSolidBrush(COLOR_HEADER);
+    FillRect(hdcMem, &bmpRect, hHeaderBrush);
+    DeleteObject(hHeaderBrush);
 
     HPEN hPen = CreatePen(PS_SOLID, 1, RGB(0, 207, 255));
     HPEN hOldPen = (HPEN)SelectObject(hdcMem, hPen);
