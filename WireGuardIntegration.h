@@ -8,10 +8,12 @@ struct WireGuardConfig {
     std::string interfaceAddress;
     std::string dns;
 
+    int mtu = 1420;  
     std::string peerPublicKey;
     std::string presharedKey;
     std::string endpoint;
     std::string allowedIPs;
+    int persistentKeepalive = 25; 
 };
 
 // Класс для интеграции с WireGuard

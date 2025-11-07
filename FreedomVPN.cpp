@@ -9,6 +9,7 @@
 #include <vector>
 #include <chrono>
 #include <sstream>
+#include <cmath>
 
 // Определение идентификаторов элементов управления
 #define MAX_LOADSTRING 100
@@ -24,20 +25,29 @@
 #define IDC_IP_TEXT 1010
 #define IDC_USAGE_TEXT 1011
 
-// Определение цветов для GUI
-#define COLOR_BACKGROUND RGB(18, 23, 30)
-#define COLOR_DARK_ELEMENT RGB(30, 35, 45)
-#define COLOR_BUTTON_TEXT RGB(255, 255, 255)
-#define COLOR_CONNECTED_START RGB(32, 107, 168)
-#define COLOR_CONNECTED_MIDDLE RGB(20, 150, 160)
-#define COLOR_CONNECTED_END RGB(40, 183, 118)
-#define COLOR_DISCONNECTED RGB(48, 53, 64)
-#define COLOR_HEADER RGB(10, 15, 22)
-#define COLOR_HEADER_TEXT RGB(255, 255, 255)
-#define COLOR_CONNECTION_TEXT RGB(180, 180, 180)
-#define COLOR_BUTTON_HOVER RGB(37, 42, 53)
-#define COLOR_CLOSE_HOVER RGB(232, 17, 35)
-#define COLOR_MINIMIZE_HOVER RGB(40, 45, 56)
+#define COLOR_BACKGROUND_TOP RGB(10,14,20)
+#define COLOR_BACKGROUND_BOTTOM RGB(20,26,38)
+#define COLOR_BACKGROUND RGB(15,20,30)
+#define COLOR_DARK_ELEMENT RGB(20,28,40)
+#define COLOR_GLASS_ELEMENT RGB(25,35,50)
+#define COLOR_BUTTON_TEXT RGB(234,234,234)
+#define COLOR_NEON_CYAN RGB(0,175,255)
+#define COLOR_NEON_TEAL RGB(0,255,183)
+#define COLOR_CONNECTED_GREEN RGB(34,197,94)
+#define COLOR_CONNECTED_GLOW RGB(20,150,70)
+#define COLOR_ERROR_RED RGB(239,68,68)
+#define COLOR_DISCONNECTED RGB(70,80,95)
+#define COLOR_DISCONNECTED_HOVER RGB(85,95,110)
+#define COLOR_HEADER RGB(12,18,28)
+#define COLOR_HEADER_TEXT RGB(234,234,234)
+#define COLOR_CONNECTION_TEXT RGB(156,163,175)
+#define COLOR_BUTTON_HOVER RGB(30,40,55)
+#define COLOR_CLOSE_HOVER RGB(239,68,68)
+#define COLOR_MINIMIZE_HOVER RGB(70,80,95)
+#define COLOR_ACCENT_BLUE RGB(0,175,255)
+#define COLOR_ACCENT_TEAL RGB(0,255,183)
+#define COLOR_SHADOW RGB(0,0,0)
+
 
 // Определение констант для заголовка окна
 #define TITLEBAR_HEIGHT 30
@@ -47,41 +57,44 @@
 // Идентификатор таймера
 #define ID_CONNECTION_TIMER 1001
 #define ID_TRAFFIC_TIMER 1002
+#define ID_ANIMATION_TIMER 1003
+#define ID_RECONNECT_TIMER 1004
 
 // Глобальные переменные
-HINSTANCE hInst;                                // Экземпляр приложения
-WCHAR szTitle[MAX_LOADSTRING];                  // Текст строки заголовка
-WCHAR szWindowClass[MAX_LOADSTRING];            // Имя класса главного окна
-WireGuardIntegration wireguard;                 // Объект для работы с WireGuard
-std::chrono::steady_clock::time_point connectionStartTime; // Время начала подключения
-bool isConnected = false;                       // Статус подключения
-bool isTitleBarHover = false;                   // Наведение на элементы заголовка
-bool isConnectHover = false;                    // Наведение на кнопку подключения
-bool isSettingsHover = false;                   // Наведение на кнопку настроек
-bool isLocationHover = false;                   // Наведение на выбор локации
-HWND hoverButton = NULL;                        // Текущая кнопка под курсором
-uint64_t downloadedBytes = 0;                   // Скачанные байты (симуляция)
-uint64_t uploadedBytes = 0;                     // Отправленные байты (симуляция)
-
-// Переменные для перетаскивания окна
+HINSTANCE hInst;                   
+WCHAR szTitle[MAX_LOADSTRING];       
+WCHAR szWindowClass[MAX_LOADSTRING];   
+WireGuardIntegration wireguard;             
+std::chrono::steady_clock::time_point connectionStartTime;
+bool isConnected = false;        
+bool isTitleBarHover = false;                 
+bool isConnectHover = false;                  
+bool isSettingsHover = false;              
+bool isLocationHover = false;            
+HWND hoverButton = NULL;                  
+uint64_t downloadedBytes = 0;             
+uint64_t uploadedBytes = 0;                  
+float animationPhase = 0.0f;
+float rotationAngle = 0.0f;
+bool isConnecting = false;
+int reconnectAttempts = 0;
+bool autoReconnect = true;
 bool g_isDragging = false;
 POINT g_dragOffset;
 
-// Дескрипторы UI-элементов
-HWND g_hWnd;                                   // Главное окно
-HWND g_hConnectButton;                         // Большая кнопка подключения
-HWND g_hSettingsButton;                        // Кнопка настроек
-HWND g_hLocationButton;                        // Кнопка выбора страны
-HWND g_hStatusBar;                             // Строка статуса
-HWND g_hTimerText;                             // Отображение времени подключения
-HWND g_hProtocolText;                          // Отображение протокола
-HWND g_hReconnectButton;                       // Кнопка переподключения
-HWND g_hCloseButton;                           // Кнопка закрытия окна
-HWND g_hMinimizeButton;                        // Кнопка сворачивания окна
-HWND g_hIPText;                                // Поле для отображения IP
-HWND g_hUsageText;                             // Поле использованного трафика
+HWND g_hWnd;                
+HWND g_hConnectButton;                    
+HWND g_hSettingsButton;        
+HWND g_hLocationButton;             
+HWND g_hStatusBar;            
+HWND g_hTimerText;                             
+HWND g_hProtocolText;                
+HWND g_hReconnectButton;              
+HWND g_hCloseButton;                
+HWND g_hMinimizeButton;                 
+HWND g_hIPText;                        
+HWND g_hUsageText;                          
 
-// Глобальные кисти и шрифты для отрисовки UI
 HBRUSH g_hBackgroundBrush;
 HBRUSH g_hDarkElementBrush;
 HBRUSH g_hConnectedBrush;
@@ -97,7 +110,7 @@ HFONT g_hHeaderFont;
 HFONT g_hStatusFont;
 HFONT g_hSmallFont;
 HFONT g_hTinyFont;
-HBITMAP g_hUkraineFlag;
+HBITMAP g_hGermanyFlag;
 HBITMAP g_hShieldIcon;
 HBITMAP g_hSettingsIcon;
 HBITMAP g_hAppIcon;
@@ -221,13 +234,11 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
     // Создание кистей и шрифтов
     g_hBackgroundBrush = CreateSolidBrush(COLOR_BACKGROUND);
     g_hDarkElementBrush = CreateSolidBrush(COLOR_DARK_ELEMENT);
-    g_hConnectedBrush = CreateSolidBrush(COLOR_CONNECTED_MIDDLE);
     g_hDisconnectedBrush = CreateSolidBrush(COLOR_DISCONNECTED);
     g_hHeaderBrush = CreateSolidBrush(COLOR_HEADER);
     g_hButtonHoverBrush = CreateSolidBrush(COLOR_BUTTON_HOVER);
     g_hCloseHoverBrush = CreateSolidBrush(COLOR_CLOSE_HOVER);
     g_hMinimizeHoverBrush = CreateSolidBrush(COLOR_MINIMIZE_HOVER);
-    g_hConnectedPen = CreatePen(PS_SOLID, 1, COLOR_CONNECTED_MIDDLE);
     g_hDisconnectedPen = CreatePen(PS_SOLID, 1, COLOR_DISCONNECTED);
 
     g_hButtonFont = CreateCustomFont(L"Segoe UI", 22);
@@ -236,8 +247,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
     g_hSmallFont = CreateCustomFont(L"Segoe UI", 12);
     g_hTinyFont = CreateCustomFont(L"Segoe UI", 10);
 
-    // Создаем иконки
-    g_hUkraineFlag = CreateFlagBitmap();
+    g_hGermanyFlag = CreateFlagBitmap();
     g_hShieldIcon = CreateShieldBitmap();
     g_hSettingsIcon = CreateSettingsBitmap();
     g_hAppIcon = CreateAppIcon();
@@ -245,22 +255,24 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
     // Инициализация интерфейса
     InitializeUI();
 
-    // Предварительная загрузка стандартной конфигурации
     const char* defaultConfig =
         "[Interface]\n"
-        "PrivateKey = kI/RvFOZ0WQ4418JpTMpTLJcET+Ps9xKCQgReuKRz0o=\n"
-        "Address = 10.84.34.2/24,fd11:5ee:bad:c0de::a54:2202/64\n"
-        "DNS = 9.9.9.9, 149.112.112.112\n"
+        "PrivateKey = 8H/QQV752yFaUcbFbwopabG1arkG3Thh/VmJe3DQiV0=\n"
+        "Address = 10.7.0.2/24,fddd:2c4:2c4:2c4::2/64\n"
+        "DNS = 1.1.1.1, 1.0.0.1\n"  // Cloudflare DNS - быстрее для игр
+        "MTU = 1420\n"  // Оптимальный MTU для предотвращения фрагментации
         "\n"
         "[Peer]\n"
-        "PublicKey = J6jTNXHjEtYXp3mZglHArYyieiXAnDES50tDduoBCHo=\n"
-        "PresharedKey = zV5cvEBMVbuiF9qkTsHwniu4qfBXfZ+Z6F7HG4IDmds=\n"
-        "Endpoint = 46.254.107.229:51820\n"
-        "AllowedIPs = 0.0.0.0/0, ::0/0\n";
+        "PublicKey = lvCMCOhewd4s3LA0jLk6iHSlsEBJzm6VYyU29qYUfw4=\n"
+        "PresharedKey = kmCrmIk2iiX2FVwcPvUqvIVqXhnJFXFPH3VHRnVShJs=\n"
+        "Endpoint = 72.61.154.191:51820\n"
+        "AllowedIPs = 0.0.0.0/0, ::0/0\n"
+        "PersistentKeepalive = 25\n";  
 
     wireguard.LoadConfigFromString(defaultConfig);
     UpdateStatus();
-
+    SetTimer(g_hWnd, ID_ANIMATION_TIMER, 16, NULL);
+    SetTimer(g_hWnd, ID_RECONNECT_TIMER, 5000, NULL);
     ShowWindow(g_hWnd, nCmdShow);
     UpdateWindow(g_hWnd);
 
@@ -296,10 +308,11 @@ void InitializeUI() {
     SendMessage(g_hCloseButton, WM_SETFONT, (WPARAM)g_hHeaderFont, TRUE);
     SendMessage(g_hMinimizeButton, WM_SETFONT, (WPARAM)g_hHeaderFont, TRUE);
 
-    // Создаем панель с флагом и страной в верхней части
-    g_hLocationButton = CreateWindowW(L"BUTTON", L"Ukraine",
+    // Create location panel with flag and country
+
+    g_hLocationButton = CreateWindowW(L"BUTTON", L"Germany",
         WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON | BS_OWNERDRAW,
-        20, 70, 180, 40, g_hWnd, (HMENU)IDC_LOCATION_BUTTON, hInst, NULL);
+        20, 70, 200, 40, g_hWnd, (HMENU)IDC_LOCATION_BUTTON, hInst, NULL);
 
     // Кнопка настроек
     g_hSettingsButton = CreateWindowW(L"BUTTON", L"",
@@ -316,26 +329,25 @@ void InitializeUI() {
         WS_VISIBLE | WS_CHILD | SS_OWNERDRAW,
         20, 340, APP_WIDTH - 40, 50, g_hWnd, NULL, hInst, NULL);
 
-    // Информация об IP
-    g_hIPText = CreateWindowW(L"STATIC", L"IP: ---.---.---.---",
+    // 🌐 IP Address display
+    g_hIPText = CreateWindowW(L"STATIC", L"🌐 IP: ---.---.---.---",
         WS_VISIBLE | WS_CHILD | SS_LEFT,
         20, 400, 310, 20, g_hWnd, (HMENU)IDC_IP_TEXT, hInst, NULL);
     SendMessage(g_hIPText, WM_SETFONT, (WPARAM)g_hSmallFont, TRUE);
 
-    // Текст о протоколе
-    g_hProtocolText = CreateWindowW(L"STATIC", L"Protocol: WireGuard",
+    // 🔒 Protocol info
+    g_hProtocolText = CreateWindowW(L"STATIC", L"🔒 Protocol: WireGuard",
         WS_VISIBLE | WS_CHILD | SS_LEFT,
-        20, 420, 150, 20, g_hWnd, (HMENU)IDC_PROTOCOL_TEXT, hInst, NULL);
+        20, 420, 160, 20, g_hWnd, (HMENU)IDC_PROTOCOL_TEXT, hInst, NULL);
     SendMessage(g_hProtocolText, WM_SETFONT, (WPARAM)g_hSmallFont, TRUE);
 
-    // Таймер подключения
-    g_hTimerText = CreateWindowW(L"STATIC", L"Connection time: 00:00:00",
+    // ⏱️ Connection timer
+    g_hTimerText = CreateWindowW(L"STATIC", L"⏱️ Time: 00:00:00",
         WS_VISIBLE | WS_CHILD | SS_LEFT,
         20, 440, 310, 20, g_hWnd, (HMENU)IDC_TIMER_TEXT, hInst, NULL);
     SendMessage(g_hTimerText, WM_SETFONT, (WPARAM)g_hSmallFont, TRUE);
-
-    // Информация об использовании трафика
-    g_hUsageText = CreateWindowW(L"STATIC", L"Data usage: 0 B ↓ | 0 B ↑",
+    // 📊 Traffic usage
+    g_hUsageText = CreateWindowW(L"STATIC", L"📊 Traffic: 0 B ↓ | 0 B ↑",
         WS_VISIBLE | WS_CHILD | SS_LEFT,
         20, 460, 310, 20, g_hWnd, (HMENU)IDC_USAGE_TEXT, hInst, NULL);
     SendMessage(g_hUsageText, WM_SETFONT, (WPARAM)g_hSmallFont, TRUE);
@@ -376,8 +388,7 @@ void CleanupUI() {
     DeleteObject(g_hSmallFont);
     DeleteObject(g_hTinyFont);
     
-    // Освобождаем картинки
-    DeleteObject(g_hUkraineFlag);
+    DeleteObject(g_hGermanyFlag);
     DeleteObject(g_hShieldIcon);
     DeleteObject(g_hSettingsIcon);
     DeleteObject(g_hAppIcon);
@@ -385,6 +396,8 @@ void CleanupUI() {
     // Убедимся, что таймеры остановлены
     KillTimer(g_hWnd, ID_CONNECTION_TIMER);
     KillTimer(g_hWnd, ID_TRAFFIC_TIMER);
+    KillTimer(g_hWnd, ID_ANIMATION_TIMER);
+    KillTimer(g_hWnd, ID_RECONNECT_TIMER);
 }
 
 // Создание пользовательского шрифта
@@ -512,8 +525,6 @@ void DrawTitleBar(HDC hdc) {
     DrawCloseButton(hdc);
     DrawMinimizeButton(hdc);
 }
-
-// Рисование кнопки закрытия в заголовке
 void DrawCloseButton(HDC hdc) {
     RECT rect;
     GetWindowRect(g_hCloseButton, &rect);
@@ -526,22 +537,14 @@ void DrawCloseButton(HDC hdc) {
     ScreenToClient(g_hWnd, &pt);
     rect.right = pt.x;
     rect.bottom = pt.y;
-    
-    // Рисуем фон кнопки в зависимости от состояния наведения
     HBRUSH brush = (hoverButton == g_hCloseButton) ? g_hCloseHoverBrush : g_hHeaderBrush;
     FillRect(hdc, &rect, brush);
-    
-    // Рисуем крестик
     SetBkMode(hdc, TRANSPARENT);
     SetTextColor(hdc, COLOR_BUTTON_TEXT);
     HFONT oldFont = (HFONT)SelectObject(hdc, g_hHeaderFont);
-    
     DrawTextW(hdc, L"×", 1, &rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-    
     SelectObject(hdc, oldFont);
 }
-
-// Рисование кнопки сворачивания в заголовке
 void DrawMinimizeButton(HDC hdc) {
     RECT rect;
     GetWindowRect(g_hMinimizeButton, &rect);
@@ -554,58 +557,98 @@ void DrawMinimizeButton(HDC hdc) {
     ScreenToClient(g_hWnd, &pt);
     rect.right = pt.x;
     rect.bottom = pt.y;
-    
-    // Рисуем фон кнопки в зависимости от состояния наведения
     HBRUSH brush = (hoverButton == g_hMinimizeButton) ? g_hMinimizeHoverBrush : g_hHeaderBrush;
     FillRect(hdc, &rect, brush);
-    
-    // Рисуем символ сворачивания
     SetBkMode(hdc, TRANSPARENT);
     SetTextColor(hdc, COLOR_BUTTON_TEXT);
     HFONT oldFont = (HFONT)SelectObject(hdc, g_hHeaderFont);
-    
-    DrawTextW(hdc, L"−", 1, &rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-    
+    DrawTextW(hdc, L"−", 1, &rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE); 
     SelectObject(hdc, oldFont);
 }
 
-// Рисование большой кнопки подключения
+
 void DrawConnectButton(HDC hdc, RECT* pRect) {
-    // Вычисляем центр и радиус
     int centerX = (pRect->left + pRect->right) / 2;
     int centerY = (pRect->top + pRect->bottom) / 2;
-    int radius = min((pRect->right - pRect->left) / 2, (pRect->bottom - pRect->top) / 2) - 5;
-
-    // Выбираем цвет в зависимости от состояния
-    COLORREF bgColor = isConnected ? RGB(40, 167, 69) : RGB(48, 53, 64);
-    COLORREF innerColor = isConnected ? RGB(35, 150, 60) : RGB(40, 45, 55);
-
-    // Рисуем внешний круг
-    HBRUSH outterBrush = CreateSolidBrush(bgColor);
-    SelectObject(hdc, outterBrush);
-    SelectObject(hdc, GetStockObject(NULL_PEN));
-    Ellipse(hdc, centerX - radius, centerY - radius, centerX + radius, centerY + radius);
-    DeleteObject(outterBrush);
-
-    // Рисуем внутренний круг (немного меньше и темнее)
-    int innerRadius = radius - 3;
-    HBRUSH innerBrush = CreateSolidBrush(innerColor);
+    int baseRadius = min((pRect->right - pRect->left) / 2, (pRect->bottom - pRect->top) / 2) - 10;
+    COLORREF mainColor, glowColor, borderColor;
+    if (isConnected) {
+        mainColor = COLOR_CONNECTED_GREEN;
+        glowColor = COLOR_CONNECTED_GLOW;
+        borderColor = COLOR_NEON_TEAL;
+    }
+    else if (isConnecting) {
+        int pulse = (int)(15 * sin(animationPhase * 3.14159 * 2));
+        mainColor = RGB(0 + pulse, 175 + pulse, 255);
+        glowColor = COLOR_NEON_CYAN;
+        borderColor = COLOR_ACCENT_TEAL;
+    }
+    else {
+        mainColor = isConnectHover ? COLOR_DISCONNECTED_HOVER : COLOR_DISCONNECTED;
+        glowColor = COLOR_BUTTON_HOVER;
+        borderColor = isConnectHover ? COLOR_NEON_CYAN : COLOR_DISCONNECTED;
+    }
+    if (isConnected || isConnecting) {
+        int pulseOffset = (int)(8 * sin(animationPhase * 3.14159 * 2));
+        for (int i = 6; i >= 0; i--) {
+            int alpha = 40 - (i * 5);
+            if (alpha < 5)alpha = 5;
+            int r = (GetRValue(glowColor) * alpha) / 100;
+            int g = (GetGValue(glowColor) * alpha) / 100;
+            int b = (GetBValue(glowColor) * alpha) / 100;
+            HPEN glowPen = CreatePen(PS_SOLID, 3, RGB(r, g, b));
+            HPEN oldPen = (HPEN)SelectObject(hdc, glowPen);
+            SelectObject(hdc, GetStockObject(NULL_BRUSH));
+            int glowRadius = baseRadius + 15 + (i * 4) + pulseOffset;
+            Ellipse(hdc, centerX - glowRadius, centerY - glowRadius, centerX + glowRadius, centerY + glowRadius);
+            SelectObject(hdc, oldPen);
+            DeleteObject(glowPen);
+        }
+    }
+    HBRUSH mainBrush = CreateSolidBrush(COLOR_DARK_ELEMENT);
+    HPEN mainPen = CreatePen(PS_SOLID, 4, borderColor);
+    SelectObject(hdc, mainBrush);
+    SelectObject(hdc, mainPen);
+    Ellipse(hdc, centerX - baseRadius, centerY - baseRadius, centerX + baseRadius, centerY + baseRadius);
+    DeleteObject(mainBrush);
+    DeleteObject(mainPen);
+    if (isConnecting) {
+        HPEN rotatingPen = CreatePen(PS_SOLID, 5, COLOR_NEON_TEAL);
+        HPEN oldPen = (HPEN)SelectObject(hdc, rotatingPen);
+        SelectObject(hdc, GetStockObject(NULL_BRUSH));
+        for (int i = 0; i < 4; i++) {
+            float startAngle = rotationAngle + (i * 90.0f);
+            float endAngle = startAngle + 60.0f;
+            int arcRadius = baseRadius + 6;
+            POINT arcStart = { centerX + (int)(arcRadius * cos(startAngle * 3.14159f / 180.0f)),centerY + (int)(arcRadius * sin(startAngle * 3.14159f / 180.0f)) };
+            MoveToEx(hdc, arcStart.x, arcStart.y, NULL);
+            for (float angle = startAngle; angle <= endAngle; angle += 3.0f) {
+                int x = centerX + (int)(arcRadius * cos(angle * 3.14159f / 180.0f));
+                int y = centerY + (int)(arcRadius * sin(angle * 3.14159f / 180.0f));
+                LineTo(hdc, x, y);
+            }
+        }
+        SelectObject(hdc, oldPen);
+        DeleteObject(rotatingPen);
+    }
+    int innerRadius = baseRadius - 12;
+    HBRUSH innerBrush = CreateSolidBrush(mainColor);
+    HPEN innerPen = CreatePen(PS_SOLID, 2, mainColor);
     SelectObject(hdc, innerBrush);
+    SelectObject(hdc, innerPen);
     Ellipse(hdc, centerX - innerRadius, centerY - innerRadius, centerX + innerRadius, centerY + innerRadius);
     DeleteObject(innerBrush);
-
-    // Рисуем иконку щита в центре
-    DrawBitmap(hdc, g_hShieldIcon, centerX - 25, centerY - 40, 50, 50);
-
-    // Текст кнопки
+    DeleteObject(innerPen);
+    DrawBitmap(hdc, g_hShieldIcon, centerX - 25, centerY - 35, 50, 50);
     SetBkMode(hdc, TRANSPARENT);
-    SetTextColor(hdc, RGB(255, 255, 255));
+    SetTextColor(hdc, COLOR_BUTTON_TEXT);
     HFONT oldFont = (HFONT)SelectObject(hdc, g_hButtonFont);
-
-    std::wstring buttonText = isConnected ? L"Disconnect" : L"Connect";
-    RECT textRect = { pRect->left, centerY + 15, pRect->right, pRect->bottom };
+    std::wstring buttonText;
+    if (isConnecting)buttonText = L"Connecting...";
+    else if (isConnected)buttonText = L"Disconnect";
+    else buttonText = L"Connect";
+    RECT textRect = { pRect->left,centerY + 25,pRect->right,pRect->bottom };
     DrawTextW(hdc, buttonText.c_str(), -1, &textRect, DT_CENTER);
-
     SelectObject(hdc, oldFont);
 }
 
@@ -623,56 +666,68 @@ void DrawStatusBar(HDC hdc) {
     rect.top = topLeft.y;
     rect.right = bottomRight.x;
     rect.bottom = bottomRight.y;
-
-    // Рисуем фон панели статуса
     if (isConnected) {
-        // Градиентный фон для подключенного статуса
-        DrawGradientRect(hdc, rect, COLOR_CONNECTED_START, COLOR_CONNECTED_MIDDLE, COLOR_CONNECTED_END);
 
-        // Рисуем флаг и статус "Connected"
-        DrawBitmap(hdc, g_hUkraineFlag, rect.left + 20, rect.top + 10, 30, 30);
+        // Neon gradient background for connected state
+
+        DrawGradientRect(hdc, rect, COLOR_CONNECTED_GLOW, COLOR_CONNECTED_GREEN, COLOR_NEON_TEAL);
+
+
+
+        // Draw Germany flag and "Connected" status
+
+        DrawBitmap(hdc, g_hGermanyFlag, rect.left + 20, rect.top + 10, 30, 30);
+
+
 
         SetBkMode(hdc, TRANSPARENT);
-        SetTextColor(hdc, RGB(255, 255, 255));
+
+        SetTextColor(hdc, COLOR_BUTTON_TEXT);
+
         HFONT oldFont = (HFONT)SelectObject(hdc, g_hStatusFont);
 
+
+
         RECT textRect = { rect.left + 60, rect.top, rect.right, rect.bottom };
-        DrawTextW(hdc, L"Connected", -1, &textRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+
+        DrawTextW(hdc, L"✓ Connected", -1, &textRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+
+
 
         SelectObject(hdc, oldFont);
+
     }
+
     else {
-        // Скрываем панель при отключенном статусе
+
+        // Hide panel when disconnected
         return;
     }
 }
 
-// Создание битмапа с флагом Украины
 HBITMAP CreateFlagBitmap() {
     HDC hdcScreen = GetDC(NULL);
     HDC hdcMem = CreateCompatibleDC(hdcScreen);
     HBITMAP hBitmap = CreateCompatibleBitmap(hdcScreen, 30, 30);
     HBITMAP hOldBitmap = (HBITMAP)SelectObject(hdcMem, hBitmap);
-
-    // Рисуем флаг Украины (голубой верх, желтый низ)
-    RECT topRect = { 0, 0, 30, 15 };
-    RECT bottomRect = { 0, 15, 30, 30 };
-
-    HBRUSH hBlueBrush = CreateSolidBrush(RGB(0, 87, 184)); // Синий цвет Украины
-    HBRUSH hYellowBrush = CreateSolidBrush(RGB(255, 215, 0)); // Желтый цвет Украины
-
-    FillRect(hdcMem, &topRect, hBlueBrush);
-    FillRect(hdcMem, &bottomRect, hYellowBrush);
-
-    // Очистка
+    RECT topRect = { 0,0,30,10 };
+    RECT middleRect = { 0,10,30,20 };
+    RECT bottomRect = { 0,20,30,30 };
+    HBRUSH hBlackBrush = CreateSolidBrush(RGB(0, 0, 0));
+    HBRUSH hRedBrush = CreateSolidBrush(RGB(221, 0, 0));
+    HBRUSH hGoldBrush = CreateSolidBrush(RGB(255, 206, 0));
+    FillRect(hdcMem, &topRect, hBlackBrush);
+    FillRect(hdcMem, &middleRect, hRedBrush);
+    FillRect(hdcMem, &bottomRect, hGoldBrush);
     SelectObject(hdcMem, hOldBitmap);
     DeleteDC(hdcMem);
     ReleaseDC(NULL, hdcScreen);
-    DeleteObject(hBlueBrush);
-    DeleteObject(hYellowBrush);
-
+    DeleteObject(hBlackBrush);
+    DeleteObject(hRedBrush);
+    DeleteObject(hGoldBrush);
     return hBitmap;
 }
+
 
 // Создание битмапа со щитом
 HBITMAP CreateShieldBitmap() {
@@ -862,7 +917,7 @@ void UpdateStatus() {
             ShowWindow(g_hUsageText, SW_SHOW);
             
             // Устанавливаем IP-адрес
-            SetWindowTextW(g_hIPText, L"IP: 46.254.107.229");
+            SetWindowTextW(g_hIPText, L"🌐 IP: 46.254.107.229");
             
             // Сбрасываем счетчики трафика
             downloadedBytes = 0;
@@ -906,7 +961,7 @@ void UpdateConnectionTimer() {
     int seconds = static_cast<int>(elapsed.count() % 60);
 
     wchar_t timeText[50];
-    swprintf_s(timeText, L"Connection time: %02d:%02d:%02d", hours, minutes, seconds);
+    swprintf_s(timeText, L"⏱️ Time: %02d:%02d:%02d", hours, minutes, seconds);
 
     SetWindowTextW(g_hTimerText, timeText);
 }
@@ -924,7 +979,7 @@ void UpdateTrafficStats() {
     std::wstring upStr = FormatBytes(uploadedBytes);
 
     wchar_t usageText[100];
-    swprintf_s(usageText, L"Data usage: %ls ↓ | %ls ↑", downStr.c_str(), upStr.c_str());
+    swprintf_s(usageText, L"📊 Traffic: %ls ↓ | %ls ↑", downStr.c_str(), upStr.c_str());
 
     SetWindowTextW(g_hUsageText, usageText);
 }
@@ -952,29 +1007,59 @@ std::wstring FormatBytes(uint64_t bytes) {
 
 // Переключение состояния подключения
 void ToggleConnection() {
+    if (isConnecting) {
+        return;
+    }
+
     if (isConnected) {
         if (wireguard.Disconnect()) {
-            ShowMessageBoxUTF8(g_hWnd, "Отключено успешно!", "Успех", MB_OK | MB_ICONINFORMATION);
+            MessageBoxW(g_hWnd, L"✓ Disconnected successfully!", L"Success", MB_OK | MB_ICONINFORMATION);
+
+            reconnectAttempts = 0;
+
         }
+
         else {
-            ShowMessageBoxUTF8(g_hWnd, "Ошибка отключения.", "Ошибка", MB_OK | MB_ICONERROR);
+
+            MessageBoxW(g_hWnd, L"❌ Disconnection error.", L"Error", MB_OK | MB_ICONERROR);
+
         }
+
     }
+
     else {
+
+        isConnecting = true;
+
+        InvalidateRect(g_hConnectButton, NULL, TRUE);
+
+
+
+        // Connect in separate thread to avoid blocking UI
+
         if (wireguard.Connect()) {
-            ShowMessageBoxUTF8(g_hWnd, "Подключение успешно!", "Успех", MB_OK | MB_ICONINFORMATION);
+
+            MessageBoxW(g_hWnd, L"✓ Connected successfully!", L"Success", MB_OK | MB_ICONINFORMATION);
+
+            reconnectAttempts = 0;
+
         }
+
         else {
-            ShowMessageBoxUTF8(g_hWnd,
-                "Ошибка подключения. Проверьте настройки и убедитесь, что WireGuard установлен.",
-                "Ошибка", MB_OK | MB_ICONERROR);
+
+            MessageBoxW(g_hWnd,
+
+                L"❌ Connection error. Check settings and make sure WireGuard is installed.",
+
+                L"Error", MB_OK | MB_ICONERROR);
         }
+        isConnecting = false;
     }
 
     UpdateStatus();
 }
 
-// Проверка, находится ли точка внутри прямоугольника
+
 bool IsPointInRect(POINT pt, RECT rect) {
     return (pt.x >= rect.left && pt.x <= rect.right &&
             pt.y >= rect.top && pt.y <= rect.bottom);
@@ -1010,13 +1095,10 @@ HWND GetButtonAtPoint(int x, int y) {
     
     return NULL;
 }
-
-// Обновление состояния наведения для кнопок
 void UpdateButtonHoverState(int x, int y) {
     HWND newHoverButton = GetButtonAtPoint(x, y);
     
     if (newHoverButton != hoverButton) {
-        // Перерисовываем старую и новую кнопку при изменении состояния
         if (hoverButton) {
             InvalidateRect(hoverButton, NULL, TRUE);
         }
@@ -1026,15 +1108,12 @@ void UpdateButtonHoverState(int x, int y) {
         if (hoverButton) {
             InvalidateRect(hoverButton, NULL, TRUE);
         }
-        
-        // Обновляем информацию о кнопке под наведением
         isConnectHover = (hoverButton == g_hConnectButton);
         isSettingsHover = (hoverButton == g_hSettingsButton);
         isLocationHover = (hoverButton == g_hLocationButton);
     }
 }
 
-// Обработчик сообщений для главного окна
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     static bool isDragging = false;
@@ -1047,6 +1126,38 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             UpdateConnectionTimer();
         } else if (wParam == ID_TRAFFIC_TIMER) {
             UpdateTrafficStats();
+        }
+        else if (wParam == ID_ANIMATION_TIMER) {
+            animationPhase += 0.05f;
+
+            if (animationPhase >= 1.0f) animationPhase = 0.0f;
+            if (isConnecting) {
+                rotationAngle += 2.0f;  
+                if (rotationAngle >= 360.0f) rotationAngle -= 360.0f;
+            }
+            InvalidateRect(g_hConnectButton, NULL, FALSE);
+        }
+        else if (wParam == ID_RECONNECT_TIMER) {
+            if (isConnected && !wireguard.IsConnected() && autoReconnect) {
+                reconnectAttempts++;
+
+                if (reconnectAttempts <= 5) {
+
+                    isConnecting = true;
+
+                    if (wireguard.Connect()) {
+
+                        reconnectAttempts = 0;
+
+                        isConnecting = false;
+
+                    }
+
+                    UpdateStatus();
+
+                }
+
+            }
         }
         break;
 
@@ -1128,21 +1239,85 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         }
         else if (pDIS->CtlID == IDC_LOCATION_BUTTON) {
             RECT rect = pDIS->rcItem;
-            COLORREF bgColor = isLocationHover ? COLOR_BUTTON_HOVER : COLOR_DARK_ELEMENT;
-            DrawRoundedRectangle(pDIS->hDC, rect, 5, bgColor);
-            DrawBitmap(pDIS->hDC, g_hUkraineFlag, rect.left + 10, (rect.top + rect.bottom - 20) / 2, 20, 20);
+            COLORREF bgColor = isLocationHover ? COLOR_GLASS_ELEMENT : COLOR_DARK_ELEMENT;
+
+            COLORREF borderColor = isLocationHover ? COLOR_NEON_CYAN : COLOR_DARK_ELEMENT;
+
+
+
+            // Draw glass-effect card with neon border
+
+            DrawRoundedRectangle(pDIS->hDC, rect, 8, bgColor);
+
+
+
+            // Draw neon border on hover
+
+            if (isLocationHover) {
+
+                HPEN borderPen = CreatePen(PS_SOLID, 2, borderColor);
+
+                HPEN oldPen = (HPEN)SelectObject(pDIS->hDC, borderPen);
+
+                SelectObject(pDIS->hDC, GetStockObject(NULL_BRUSH));
+
+                RoundRect(pDIS->hDC, rect.left, rect.top, rect.right, rect.bottom, 8, 8);
+
+                SelectObject(pDIS->hDC, oldPen);
+
+                DeleteObject(borderPen);
+
+            }
+
+
+
+            // Draw Germany flag
+
+            DrawBitmap(pDIS->hDC, g_hGermanyFlag, rect.left + 15, (rect.top + rect.bottom - 20) / 2, 24, 24);
+
+
+
             SetBkMode(pDIS->hDC, TRANSPARENT);
-            SetTextColor(pDIS->hDC, RGB(255, 255, 255));
+
+            SetTextColor(pDIS->hDC, COLOR_BUTTON_TEXT);
+
             HFONT oldFont = (HFONT)SelectObject(pDIS->hDC, g_hStatusFont);
-            RECT textRect = { rect.left + 40, rect.top, rect.right, rect.bottom };
-            DrawTextW(pDIS->hDC, L"Ukraine", -1, &textRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+
+            RECT textRect = { rect.left + 48, rect.top, rect.right, rect.bottom };
+
+            DrawTextW(pDIS->hDC, L"🇩🇪 Frankfurt", -1, &textRect, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
             SelectObject(pDIS->hDC, oldFont);
             return TRUE;
         }
         else if (pDIS->CtlID == IDC_SETTINGS_BUTTON) {
             RECT rect = pDIS->rcItem;
-            COLORREF bgColor = isSettingsHover ? COLOR_BUTTON_HOVER : COLOR_DARK_ELEMENT;
-            DrawRoundedRectangle(pDIS->hDC, rect, 5, bgColor);
+            COLORREF bgColor = isSettingsHover ? COLOR_GLASS_ELEMENT : COLOR_DARK_ELEMENT;
+
+            COLORREF borderColor = isSettingsHover ? COLOR_NEON_CYAN : COLOR_DARK_ELEMENT;
+
+
+
+            DrawRoundedRectangle(pDIS->hDC, rect, 8, bgColor);
+
+
+
+            // Neon border on hover
+
+            if (isSettingsHover) {
+
+                HPEN borderPen = CreatePen(PS_SOLID, 2, borderColor);
+
+                HPEN oldPen = (HPEN)SelectObject(pDIS->hDC, borderPen);
+
+                SelectObject(pDIS->hDC, GetStockObject(NULL_BRUSH));
+
+                RoundRect(pDIS->hDC, rect.left, rect.top, rect.right, rect.bottom, 8, 8);
+
+                SelectObject(pDIS->hDC, oldPen);
+
+                DeleteObject(borderPen);
+
+            }
             DrawBitmap(pDIS->hDC, g_hSettingsIcon, rect.left + 5, rect.top + 5, 30, 30);
             return TRUE;
         }
@@ -1192,16 +1367,25 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             if (isConnected) {
                 if (wireguard.Disconnect()) {
                     if (wireguard.Connect()) {
-                        ShowMessageBoxUTF8(g_hWnd, "Переподключение успешно!", "Успех", MB_OK | MB_ICONINFORMATION);
+                        MessageBoxW(g_hWnd, L"✓ Reconnected successfully!", L"Success", MB_OK | MB_ICONINFORMATION);
+
                     }
+
                 }
+
                 UpdateStatus();
+
             }
+
             break;
 
+
+
         case IDC_LOCATION_BUTTON:
-            // Покажем диалог с выбором локации
-            MessageBoxW(hWnd, L"В текущей версии доступна только Украина.", L"Выбор локации", MB_OK | MB_ICONINFORMATION);
+
+            // Show location selection dialog
+
+            MessageBoxW(hWnd, L"🇩🇪 Current location: Frankfurt, Germany\n\nMore locations coming soon!", L"Location", MB_OK | MB_ICONINFORMATION);
             break;
 
         case IDC_SETTINGS_BUTTON:
@@ -1231,25 +1415,41 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         RECT clientRect;
         GetClientRect(hWnd, &clientRect);
 
-        // Заполняем фон полностью перед любой отрисовкой
-        FillRect(hdc, &clientRect, g_hBackgroundBrush);
+        DrawGradientRect(hdc, clientRect, COLOR_BACKGROUND_TOP, COLOR_BACKGROUND, COLOR_BACKGROUND_BOTTOM);
 
-        // Отрисовываем заголовок окна
+
+
+        // Draw title bar
+
         DrawTitleBar(hdc);
 
-        // Отрисовываем фон верхней панели
+
+
+        // Draw header panel (glass effect)
+
         RECT headerRect = { 0, TITLEBAR_HEIGHT, APP_WIDTH, TITLEBAR_HEIGHT + 40 };
-        FillRect(hdc, &headerRect, g_hHeaderBrush);
 
-        // Отрисовываем название приложения на верхней панели
+        HBRUSH headerBrush = CreateSolidBrush(COLOR_HEADER);
+
+        FillRect(hdc, &headerRect, headerBrush);
+
+        DeleteObject(headerBrush);
+
+
+
+        // Draw app title with neon glow effect
+
         SetBkMode(hdc, TRANSPARENT);
-        SetTextColor(hdc, COLOR_HEADER_TEXT);
-        HFONT oldFont = (HFONT)SelectObject(hdc, g_hHeaderFont);
-        RECT titleRect = { 0, TITLEBAR_HEIGHT + 5, APP_WIDTH, TITLEBAR_HEIGHT + 35 };
-        DrawTextW(hdc, L"FreedomVPN", -1, &titleRect, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
-        SelectObject(hdc, oldFont);
 
-        // Обязательно вызываем отрисовку дочерних элементов после заливки фона
+        SetTextColor(hdc, COLOR_NEON_CYAN);
+
+        HFONT oldFont = (HFONT)SelectObject(hdc, g_hHeaderFont);
+
+        RECT titleRect = { 0, TITLEBAR_HEIGHT + 5, APP_WIDTH, TITLEBAR_HEIGHT + 35 };
+
+        DrawTextW(hdc, L"⚡ FREEDOM VPN", -1, &titleRect, DT_CENTER | DT_SINGLELINE | DT_VCENTER);
+
+        SelectObject(hdc, oldFont);
         EnumChildWindows(hWnd, [](HWND hwnd, LPARAM lParam) -> BOOL {
             InvalidateRect(hwnd, NULL, TRUE);
             return TRUE;
