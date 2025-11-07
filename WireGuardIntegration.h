@@ -2,35 +2,37 @@
 
 #include <string>
 
-// Структура для хранения конфигурации WireGuard
+// пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ WireGuard
 struct WireGuardConfig {
     std::string interfacePrivateKey;
     std::string interfaceAddress;
     std::string dns;
+    int mtu = 1420;  // MTU РґР»СЏ РѕРїС‚РёРјРёР·Р°С†РёРё (РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ 1420 РґР»СЏ РёРіСЂ)
 
     std::string peerPublicKey;
     std::string presharedKey;
     std::string endpoint;
     std::string allowedIPs;
+    int persistentKeepalive = 25;  // Keep-alive РґР»СЏ СЃС‚Р°Р±РёР»СЊРЅРѕСЃС‚Рё РІ РёРіСЂР°С… (СЃРµРєСѓРЅРґС‹)
 };
 
-// Класс для интеграции с WireGuard
+// пїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ WireGuard
 class WireGuardIntegration {
 public:
     WireGuardIntegration();
     ~WireGuardIntegration();
 
-    // Загрузка конфигурации
+    // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
     bool LoadConfigFromString(const std::string& configContent);
     bool LoadConfigFromFile(const std::string& filePath);
     bool SaveConfigToFile(const std::string& filePath);
 
-    // Управление подключением
+    // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
     bool Connect();
     bool Disconnect();
     bool IsConnected() const;
 
-    // Информация о подключении
+    // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ
     std::string GetConnectionInfo() const;
 
 private:
@@ -38,6 +40,6 @@ private:
     bool isConnected;
     bool configLoaded;
 
-    // Вспомогательные функции
+    // пїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅпїЅ пїЅпїЅпїЅпїЅпїЅпїЅпїЅ
     std::string Trim(const std::string& str);
 };

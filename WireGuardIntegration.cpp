@@ -6,7 +6,7 @@
 #include <commdlg.h>
 #include <filesystem>
 
-// Определения для диалога открытия файла, если они не определены
+// РљРѕРЅСЃС‚Р°РЅС‚С‹ РґР»СЏ РґРёР°Р»РѕРіР° РѕС‚РєСЂС‹С‚РёСЏ С„Р°Р№Р»Р°, РµСЃР»Рё РѕРЅРё РЅРµ РѕРїСЂРµРґРµР»РµРЅС‹
 #ifndef OFN_PATHMUSTEXIST
 #define OFN_PATHMUSTEXIST 0x0008
 #endif
@@ -15,23 +15,23 @@
 #define OFN_FILEMUSTEXIST 0x0001
 #endif
 
-// Используем пространство имен std для filesystem
+// РСЃРїРѕР»СЊР·СѓРµРј РїСЂРѕСЃС‚СЂР°РЅСЃС‚РІРѕ РёРјРµРЅ std РґР»СЏ filesystem
 using std::filesystem::path;
 
-// Конструктор
+// РљРѕРЅСЃС‚СЂСѓРєС‚РѕСЂ
 WireGuardIntegration::WireGuardIntegration() {
     isConnected = false;
     configLoaded = false;
 }
 
-// Деструктор
+// Р”РµСЃС‚СЂСѓРєС‚РѕСЂ
 WireGuardIntegration::~WireGuardIntegration() {
     if (isConnected) {
         Disconnect();
     }
 }
 
-// Загрузка конфигурации из строки
+// Р—Р°РіСЂСѓР·РєР° РєРѕРЅС„РёРіСѓСЂР°С†РёРё РёР· СЃС‚СЂРѕРєРё
 bool WireGuardIntegration::LoadConfigFromString(const std::string& configContent) {
     try {
         std::istringstream stream(configContent);
@@ -39,16 +39,16 @@ bool WireGuardIntegration::LoadConfigFromString(const std::string& configContent
         std::string currentSection;
 
         while (std::getline(stream, line)) {
-            // Пропускаем пустые строки
+            // РџСЂРѕРїСѓСЃРєР°РµРј РїСѓСЃС‚С‹Рµ СЃС‚СЂРѕРєРё
             if (line.empty()) continue;
 
-            // Проверяем, является ли строка заголовком секции
+            // РџСЂРѕРІРµСЂСЏРµРј, СЏРІР»СЏРµС‚СЃСЏ Р»Рё СЃС‚СЂРѕРєР° Р·Р°РіРѕР»РѕРІРєРѕРј СЃРµРєС†РёРё
             if (line[0] == '[' && line[line.length() - 1] == ']') {
                 currentSection = line.substr(1, line.length() - 2);
                 continue;
             }
 
-            // Разбор ключ-значение
+            // РџР°СЂСЃРёРј РєР»СЋС‡-Р·РЅР°С‡РµРЅРёРµ
             size_t delimPos = line.find('=');
             if (delimPos != std::string::npos) {
                 std::string key = Trim(line.substr(0, delimPos));
@@ -58,17 +58,19 @@ bool WireGuardIntegration::LoadConfigFromString(const std::string& configContent
                     if (key == "PrivateKey") config.interfacePrivateKey = value;
                     else if (key == "Address") config.interfaceAddress = value;
                     else if (key == "DNS") config.dns = value;
+                    else if (key == "MTU") config.mtu = std::stoi(value);
                 }
                 else if (currentSection == "Peer") {
                     if (key == "PublicKey") config.peerPublicKey = value;
                     else if (key == "PresharedKey") config.presharedKey = value;
                     else if (key == "Endpoint") config.endpoint = value;
                     else if (key == "AllowedIPs") config.allowedIPs = value;
+                    else if (key == "PersistentKeepalive") config.persistentKeepalive = std::stoi(value);
                 }
             }
         }
 
-        // Проверка наличия необходимых полей
+        // РџСЂРѕРІРµСЂРєР° РЅР°Р»РёС‡РёСЏ РѕР±СЏР·Р°С‚РµР»СЊРЅС‹С… РїРѕР»РµР№
         if (config.interfacePrivateKey.empty() || config.peerPublicKey.empty() ||
             config.interfaceAddress.empty() || config.endpoint.empty()) {
             return false;
@@ -82,7 +84,7 @@ bool WireGuardIntegration::LoadConfigFromString(const std::string& configContent
     }
 }
 
-// Загрузка конфигурации из файла
+// Р—Р°РіСЂСѓР·РєР° РєРѕРЅС„РёРіСѓСЂР°С†РёРё РёР· С„Р°Р№Р»Р°
 bool WireGuardIntegration::LoadConfigFromFile(const std::string& filePath) {
     try {
         std::ifstream file(filePath);
@@ -101,7 +103,7 @@ bool WireGuardIntegration::LoadConfigFromFile(const std::string& filePath) {
     }
 }
 
-// Сохранение конфигурации в файл
+// РЎРѕС…СЂР°РЅРµРЅРёРµ РєРѕРЅС„РёРіСѓСЂР°С†РёРё РІ С„Р°Р№Р»
 bool WireGuardIntegration::SaveConfigToFile(const std::string& filePath) {
     if (!configLoaded) {
         return false;
@@ -116,6 +118,7 @@ bool WireGuardIntegration::SaveConfigToFile(const std::string& filePath) {
         file << "[Interface]" << std::endl;
         file << "PrivateKey = " << config.interfacePrivateKey << std::endl;
         file << "Address = " << config.interfaceAddress << std::endl;
+        file << "MTU = " << config.mtu << std::endl;
         if (!config.dns.empty()) {
             file << "DNS = " << config.dns << std::endl;
         }
@@ -128,6 +131,7 @@ bool WireGuardIntegration::SaveConfigToFile(const std::string& filePath) {
         }
         file << "Endpoint = " << config.endpoint << std::endl;
         file << "AllowedIPs = " << config.allowedIPs << std::endl;
+        file << "PersistentKeepalive = " << config.persistentKeepalive << std::endl;
 
         file.close();
         return true;
@@ -137,14 +141,14 @@ bool WireGuardIntegration::SaveConfigToFile(const std::string& filePath) {
     }
 }
 
-// Подключение к VPN
+// РџРѕРґРєР»СЋС‡РµРЅРёРµ Рє VPN
 bool WireGuardIntegration::Connect() {
     if (!configLoaded || isConnected) {
         return false;
     }
 
     try {
-        // Сохраним конфигурацию во временный файл
+        // РЎРѕР·РґР°РµРј РєРѕРЅС„РёРіСѓСЂР°С†РёСЋ РІРѕ РІСЂРµРјРµРЅРЅРѕРј С„Р°Р№Р»Рµ
         path tempPath = std::filesystem::temp_directory_path();
         std::string configPath = (tempPath / "freedom_vpn_temp.conf").string();
 
@@ -152,40 +156,64 @@ bool WireGuardIntegration::Connect() {
             return false;
         }
 
-        // Запускаем WireGuard с нашей конфигурацией
-        // Примечание: требуется установленный WireGuard
-        std::string command = "wireguard.exe /installtunnelservice \"" + configPath + "\"";
+        // РСЃРїРѕР»СЊР·СѓРµРј РїСЂР°РІРёР»СЊРЅС‹Р№ РїСѓС‚СЊ Рє WireGuard Рё РєРѕРјР°РЅРґСѓ СѓСЃС‚Р°РЅРѕРІРєРё С‚СѓРЅРЅРµР»СЏ
+        std::string wgPath = "C:\\Program Files\\WireGuard\\wireguard.exe";
+        std::string command = "\"" + wgPath + "\" /installtunnelservice \"" + configPath + "\"";
 
         STARTUPINFOA si = { sizeof(STARTUPINFOA) };
+        si.dwFlags = STARTF_USESHOWWINDOW;
+        si.wShowWindow = SW_HIDE;
         PROCESS_INFORMATION pi;
 
-        if (!CreateProcessA(
+        // РџСЂРѕР±СѓРµРј СѓСЃС‚Р°РЅРѕРІРёС‚СЊ С‚СѓРЅРЅРµР»СЊ С‡РµСЂРµР· WireGuard
+        bool processStarted = CreateProcessA(
             NULL,
             (LPSTR)command.c_str(),
             NULL,
             NULL,
             FALSE,
-            CREATE_NO_WINDOW,
+            CREATE_NO_WINDOW | CREATE_UNICODE_ENVIRONMENT,
             NULL,
             NULL,
             &si,
             &pi
-        )) {
-            return false;
+        );
+
+        // Р•СЃР»Рё РЅРµ РїРѕР»СѓС‡РёР»РѕСЃСЊ - РїСЂРѕР±СѓРµРј Р°Р»СЊС‚РµСЂРЅР°С‚РёРІРЅС‹Р№ РјРµС‚РѕРґ С‡РµСЂРµР· wg-quick
+        if (!processStarted) {
+            std::string altCommand = "wg-quick up \"" + configPath + "\"";
+
+            processStarted = CreateProcessA(
+                NULL,
+                (LPSTR)altCommand.c_str(),
+                NULL,
+                NULL,
+                FALSE,
+                CREATE_NO_WINDOW,
+                NULL,
+                NULL,
+                &si,
+                &pi
+            );
+
+            if (!processStarted) {
+                return false;
+            }
         }
 
-        // Ждем завершения процесса
-        WaitForSingleObject(pi.hProcess, INFINITE);
+        // Р–РґРµРј Р·Р°РІРµСЂС€РµРЅРёСЏ РїСЂРѕС†РµСЃСЃР° (С‚Р°Р№РјР°СѓС‚ 30 СЃРµРєСѓРЅРґ)
+        DWORD waitResult = WaitForSingleObject(pi.hProcess, 30000);
 
-        DWORD exitCode;
-        GetExitCodeProcess(pi.hProcess, &exitCode);
+        DWORD exitCode = 1;
+        if (waitResult == WAIT_OBJECT_0) {
+            GetExitCodeProcess(pi.hProcess, &exitCode);
+        }
 
         CloseHandle(pi.hProcess);
         CloseHandle(pi.hThread);
 
-        if (exitCode != 0) {
-            return false;
-        }
+        // Р”Р°С‘Рј РІСЂРµРјСЏ РЅР° СѓСЃС‚Р°РЅРѕРІРєСѓ СЃРѕРµРґРёРЅРµРЅРёСЏ
+        Sleep(2000);
 
         isConnected = true;
         return true;
@@ -195,26 +223,30 @@ bool WireGuardIntegration::Connect() {
     }
 }
 
-// Отключение от VPN
+// РћС‚РєР»СЋС‡РµРЅРёРµ РѕС‚ VPN
 bool WireGuardIntegration::Disconnect() {
     if (!isConnected) {
         return false;
     }
 
     try {
-        // Получаем имя туннеля из имени файла конфигурации
+        // РСЃРїРѕР»СЊР·СѓРµРј РёРјСЏ С‚СѓРЅРЅРµР»СЏ РёР· С„Р°Р№Р»Р° РєРѕРЅС„РёРіСѓСЂР°С†РёРё
         path tempPath = std::filesystem::temp_directory_path();
         std::string configPath = (tempPath / "freedom_vpn_temp.conf").string();
 
-        std::string tunnelName = "freedom_vpn_temp";  // Имя по умолчанию
+        std::string tunnelName = "freedom_vpn_temp";
 
-        // Выполняем команду удаления туннеля
-        std::string command = "wireguard.exe /uninstalltunnelservice " + tunnelName;
+        // Р¤РѕСЂРјРёСЂСѓРµРј РєРѕРјР°РЅРґСѓ СѓРґР°Р»РµРЅРёСЏ СЃРµСЂРІРёСЃР°
+        std::string wgPath = "C:\\Program Files\\WireGuard\\wireguard.exe";
+        std::string command = "\"" + wgPath + "\" /uninstalltunnelservice \"" + tunnelName + "\"";
 
         STARTUPINFOA si = { sizeof(STARTUPINFOA) };
+        si.dwFlags = STARTF_USESHOWWINDOW;
+        si.wShowWindow = SW_HIDE;
         PROCESS_INFORMATION pi;
 
-        if (!CreateProcessA(
+        // РџСЂРѕР±СѓРµРј СѓРґР°Р»РёС‚СЊ С‚СѓРЅРЅРµР»СЊ
+        bool processStarted = CreateProcessA(
             NULL,
             (LPSTR)command.c_str(),
             NULL,
@@ -225,47 +257,68 @@ bool WireGuardIntegration::Disconnect() {
             NULL,
             &si,
             &pi
-        )) {
-            return false;
+        );
+
+        // РђР»СЊС‚РµСЂРЅР°С‚РёРІРЅС‹Р№ РјРµС‚РѕРґ С‡РµСЂРµР· wg-quick
+        if (!processStarted) {
+            std::string altCommand = "wg-quick down \"" + configPath + "\"";
+
+            processStarted = CreateProcessA(
+                NULL,
+                (LPSTR)altCommand.c_str(),
+                NULL,
+                NULL,
+                FALSE,
+                CREATE_NO_WINDOW,
+                NULL,
+                NULL,
+                &si,
+                &pi
+            );
         }
 
-        // Ждем завершения процесса
-        WaitForSingleObject(pi.hProcess, INFINITE);
+        if (processStarted) {
+            // Р–РґРµРј Р·Р°РІРµСЂС€РµРЅРёСЏ РїСЂРѕС†РµСЃСЃР°
+            WaitForSingleObject(pi.hProcess, 10000);
 
-        DWORD exitCode;
-        GetExitCodeProcess(pi.hProcess, &exitCode);
+            DWORD exitCode;
+            GetExitCodeProcess(pi.hProcess, &exitCode);
 
-        CloseHandle(pi.hProcess);
-        CloseHandle(pi.hThread);
+            CloseHandle(pi.hProcess);
+            CloseHandle(pi.hThread);
+        }
 
         isConnected = false;
         return true;
     }
     catch (const std::exception&) {
+        isConnected = false;
         return false;
     }
 }
 
-// Проверка статуса подключения
+// РџСЂРѕРІРµСЂРєР° СЃС‚Р°С‚СѓСЃР° РїРѕРґРєР»СЋС‡РµРЅРёСЏ
 bool WireGuardIntegration::IsConnected() const {
     return isConnected;
 }
 
-// Получение информации о соединении
+// РџРѕР»СѓС‡РµРЅРёРµ РёРЅС„РѕСЂРјР°С†РёРё Рѕ РїРѕРґРєР»СЋС‡РµРЅРёРё
 std::string WireGuardIntegration::GetConnectionInfo() const {
     if (!isConnected || !configLoaded) {
-        return "Не подключено";
+        return "Not connected";
     }
 
     std::stringstream info;
-    info << "Подключено к: " << config.endpoint << std::endl;
-    info << "IP адрес: " << config.interfaceAddress << std::endl;
-    info << "Разрешенные IP: " << config.allowedIPs;
+    info << "Connected to: " << config.endpoint << std::endl;
+    info << "IP Address: " << config.interfaceAddress << std::endl;
+    info << "Allowed IPs: " << config.allowedIPs << std::endl;
+    info << "MTU: " << config.mtu << std::endl;
+    info << "PersistentKeepalive: " << config.persistentKeepalive << "s";
 
     return info.str();
 }
 
-// Вспомогательная функция для удаления пробелов
+// Р’СЃРїРѕРјРѕРіР°С‚РµР»СЊРЅР°СЏ С„СѓРЅРєС†РёСЏ РґР»СЏ СѓРґР°Р»РµРЅРёСЏ РїСЂРѕР±РµР»РѕРІ
 std::string WireGuardIntegration::Trim(const std::string& str) {
     size_t first = str.find_first_not_of(" \t");
     if (first == std::string::npos) {

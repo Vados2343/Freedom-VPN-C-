@@ -24,20 +24,25 @@
 #define IDC_IP_TEXT 1010
 #define IDC_USAGE_TEXT 1011
 
-// Определение цветов для GUI
-#define COLOR_BACKGROUND RGB(18, 23, 30)
-#define COLOR_DARK_ELEMENT RGB(30, 35, 45)
+// Определение цветов для GUI (улучшенная цветовая палитра)
+#define COLOR_BACKGROUND RGB(15, 18, 25)
+#define COLOR_DARK_ELEMENT RGB(25, 30, 40)
 #define COLOR_BUTTON_TEXT RGB(255, 255, 255)
-#define COLOR_CONNECTED_START RGB(32, 107, 168)
-#define COLOR_CONNECTED_MIDDLE RGB(20, 150, 160)
-#define COLOR_CONNECTED_END RGB(40, 183, 118)
-#define COLOR_DISCONNECTED RGB(48, 53, 64)
-#define COLOR_HEADER RGB(10, 15, 22)
-#define COLOR_HEADER_TEXT RGB(255, 255, 255)
-#define COLOR_CONNECTION_TEXT RGB(180, 180, 180)
-#define COLOR_BUTTON_HOVER RGB(37, 42, 53)
-#define COLOR_CLOSE_HOVER RGB(232, 17, 35)
-#define COLOR_MINIMIZE_HOVER RGB(40, 45, 56)
+#define COLOR_CONNECTED_START RGB(16, 185, 129)      // Emerald
+#define COLOR_CONNECTED_MIDDLE RGB(5, 150, 105)      // Emerald dark
+#define COLOR_CONNECTED_END RGB(4, 120, 87)          // Emerald darker
+#define COLOR_DISCONNECTED RGB(55, 65, 81)           // Gray
+#define COLOR_DISCONNECTED_HOVER RGB(75, 85, 101)    // Gray lighter
+#define COLOR_HEADER RGB(17, 24, 39)                 // Dark blue-gray
+#define COLOR_HEADER_TEXT RGB(243, 244, 246)
+#define COLOR_CONNECTION_TEXT RGB(156, 163, 175)
+#define COLOR_BUTTON_HOVER RGB(31, 41, 55)
+#define COLOR_CLOSE_HOVER RGB(239, 68, 68)           // Red
+#define COLOR_MINIMIZE_HOVER RGB(55, 65, 81)
+#define COLOR_ACCENT RGB(59, 130, 246)               // Blue accent
+#define COLOR_ACCENT_HOVER RGB(37, 99, 235)          // Blue darker
+#define COLOR_SUCCESS RGB(34, 197, 94)               // Green
+#define COLOR_SHADOW RGB(0, 0, 0)                    // Для теней
 
 // Определение констант для заголовка окна
 #define TITLEBAR_HEIGHT 30
@@ -47,6 +52,8 @@
 // Идентификатор таймера
 #define ID_CONNECTION_TIMER 1001
 #define ID_TRAFFIC_TIMER 1002
+#define ID_ANIMATION_TIMER 1003
+#define ID_RECONNECT_TIMER 1004
 
 // Глобальные переменные
 HINSTANCE hInst;                                // Экземпляр приложения
@@ -62,6 +69,10 @@ bool isLocationHover = false;                   // Наведение на вы�
 HWND hoverButton = NULL;                        // Текущая кнопка под курсором
 uint64_t downloadedBytes = 0;                   // Скачанные байты (симуляция)
 uint64_t uploadedBytes = 0;                     // Отправленные байты (симуляция)
+float animationPhase = 0.0f;                    // Фаза анимации для пульсации (0-1)
+bool isConnecting = false;                      // Флаг процесса подключения
+int reconnectAttempts = 0;                      // Счетчик попыток переподключения
+bool autoReconnect = true;                      // Автоматическое переподключение
 
 // Переменные для перетаскивания окна
 bool g_isDragging = false;
@@ -245,21 +256,29 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
     // Инициализация интерфейса
     InitializeUI();
 
-    // Предварительная загрузка стандартной конфигурации
+    // Предварительная загрузка стандартной конфигурации с оптимизацией для игр
     const char* defaultConfig =
         "[Interface]\n"
         "PrivateKey = kI/RvFOZ0WQ4418JpTMpTLJcET+Ps9xKCQgReuKRz0o=\n"
         "Address = 10.84.34.2/24,fd11:5ee:bad:c0de::a54:2202/64\n"
-        "DNS = 9.9.9.9, 149.112.112.112\n"
+        "DNS = 1.1.1.1, 1.0.0.1\n"  // Cloudflare DNS - быстрее для игр
+        "MTU = 1420\n"  // Оптимальный MTU для предотвращения фрагментации
         "\n"
         "[Peer]\n"
         "PublicKey = J6jTNXHjEtYXp3mZglHArYyieiXAnDES50tDduoBCHo=\n"
         "PresharedKey = zV5cvEBMVbuiF9qkTsHwniu4qfBXfZ+Z6F7HG4IDmds=\n"
         "Endpoint = 46.254.107.229:51820\n"
-        "AllowedIPs = 0.0.0.0/0, ::0/0\n";
+        "AllowedIPs = 0.0.0.0/0, ::0/0\n"
+        "PersistentKeepalive = 25\n";  // Keep-alive каждые 25 сек - критично для игр!
 
     wireguard.LoadConfigFromString(defaultConfig);
     UpdateStatus();
+
+    // Запускаем таймер анимации (60 FPS)
+    SetTimer(g_hWnd, ID_ANIMATION_TIMER, 16, NULL);
+
+    // Запускаем таймер проверки соединения (каждые 5 секунд)
+    SetTimer(g_hWnd, ID_RECONNECT_TIMER, 5000, NULL);
 
     ShowWindow(g_hWnd, nCmdShow);
     UpdateWindow(g_hWnd);
@@ -382,9 +401,11 @@ void CleanupUI() {
     DeleteObject(g_hSettingsIcon);
     DeleteObject(g_hAppIcon);
 
-    // Убедимся, что таймеры остановлены
+    // Убедимся, что все таймеры остановлены
     KillTimer(g_hWnd, ID_CONNECTION_TIMER);
     KillTimer(g_hWnd, ID_TRAFFIC_TIMER);
+    KillTimer(g_hWnd, ID_ANIMATION_TIMER);
+    KillTimer(g_hWnd, ID_RECONNECT_TIMER);
 }
 
 // Создание пользовательского шрифта
@@ -569,30 +590,91 @@ void DrawMinimizeButton(HDC hdc) {
     SelectObject(hdc, oldFont);
 }
 
-// Рисование большой кнопки подключения
+// Рисование большой кнопки подключения с анимацией
 void DrawConnectButton(HDC hdc, RECT* pRect) {
     // Вычисляем центр и радиус
     int centerX = (pRect->left + pRect->right) / 2;
     int centerY = (pRect->top + pRect->bottom) / 2;
-    int radius = min((pRect->right - pRect->left) / 2, (pRect->bottom - pRect->top) / 2) - 5;
+    int baseRadius = min((pRect->right - pRect->left) / 2, (pRect->bottom - pRect->top) / 2) - 5;
 
     // Выбираем цвет в зависимости от состояния
-    COLORREF bgColor = isConnected ? RGB(40, 167, 69) : RGB(48, 53, 64);
-    COLORREF innerColor = isConnected ? RGB(35, 150, 60) : RGB(40, 45, 55);
+    COLORREF bgColor, innerColor, glowColor;
+
+    if (isConnected) {
+        bgColor = COLOR_CONNECTED_MIDDLE;
+        innerColor = COLOR_CONNECTED_END;
+        glowColor = COLOR_CONNECTED_START;
+    } else if (isConnecting) {
+        // Анимация подключения
+        int pulseIntensity = (int)(20 * sin(animationPhase * 3.14159 * 2));
+        bgColor = RGB(59 + pulseIntensity, 130 + pulseIntensity, 246);
+        innerColor = RGB(37, 99, 235);
+        glowColor = COLOR_ACCENT;
+    } else {
+        bgColor = isConnectHover ? COLOR_DISCONNECTED_HOVER : COLOR_DISCONNECTED;
+        innerColor = COLOR_DARK_ELEMENT;
+        glowColor = COLOR_BUTTON_HOVER;
+    }
+
+    // Рисуем эффект свечения (glow) для подключенного/подключающегося состояния
+    if (isConnected || isConnecting) {
+        int glowRadius = baseRadius + 10 + (int)(5 * sin(animationPhase * 3.14159 * 2));
+
+        // Создаем градиентное свечение
+        for (int i = 0; i < 8; i++) {
+            int alpha = 255 - (i * 30);
+            if (alpha < 0) alpha = 0;
+
+            COLORREF glowShade = RGB(
+                (GetRValue(glowColor) * alpha) / 255,
+                (GetGValue(glowColor) * alpha) / 255,
+                (GetBValue(glowColor) * alpha) / 255
+            );
+
+            HBRUSH glowBrush = CreateSolidBrush(glowShade);
+            HPEN glowPen = CreatePen(PS_SOLID, 2, glowShade);
+            SelectObject(hdc, glowBrush);
+            SelectObject(hdc, glowPen);
+
+            int currentRadius = baseRadius + (i * 2);
+            Ellipse(hdc, centerX - currentRadius, centerY - currentRadius,
+                    centerX + currentRadius, centerY + currentRadius);
+
+            DeleteObject(glowBrush);
+            DeleteObject(glowPen);
+        }
+    }
+
+    // Рисуем тень для объема
+    HBRUSH shadowBrush = CreateSolidBrush(RGB(0, 0, 0));
+    HPEN shadowPen = CreatePen(PS_SOLID, 1, RGB(0, 0, 0));
+    SelectObject(hdc, shadowBrush);
+    SelectObject(hdc, shadowPen);
+    Ellipse(hdc, centerX - baseRadius + 3, centerY - baseRadius + 3,
+            centerX + baseRadius + 3, centerY + baseRadius + 3);
+    DeleteObject(shadowBrush);
+    DeleteObject(shadowPen);
 
     // Рисуем внешний круг
     HBRUSH outterBrush = CreateSolidBrush(bgColor);
+    HPEN outterPen = CreatePen(PS_SOLID, 2, bgColor);
     SelectObject(hdc, outterBrush);
-    SelectObject(hdc, GetStockObject(NULL_PEN));
-    Ellipse(hdc, centerX - radius, centerY - radius, centerX + radius, centerY + radius);
+    SelectObject(hdc, outterPen);
+    Ellipse(hdc, centerX - baseRadius, centerY - baseRadius,
+            centerX + baseRadius, centerY + baseRadius);
     DeleteObject(outterBrush);
+    DeleteObject(outterPen);
 
-    // Рисуем внутренний круг (немного меньше и темнее)
-    int innerRadius = radius - 3;
+    // Рисуем внутренний круг (немного меньше и темнее) для объема
+    int innerRadius = baseRadius - 8;
     HBRUSH innerBrush = CreateSolidBrush(innerColor);
+    HPEN innerPen = CreatePen(PS_SOLID, 1, innerColor);
     SelectObject(hdc, innerBrush);
-    Ellipse(hdc, centerX - innerRadius, centerY - innerRadius, centerX + innerRadius, centerY + innerRadius);
+    SelectObject(hdc, innerPen);
+    Ellipse(hdc, centerX - innerRadius, centerY - innerRadius,
+            centerX + innerRadius, centerY + innerRadius);
     DeleteObject(innerBrush);
+    DeleteObject(innerPen);
 
     // Рисуем иконку щита в центре
     DrawBitmap(hdc, g_hShieldIcon, centerX - 25, centerY - 40, 50, 50);
@@ -602,8 +684,16 @@ void DrawConnectButton(HDC hdc, RECT* pRect) {
     SetTextColor(hdc, RGB(255, 255, 255));
     HFONT oldFont = (HFONT)SelectObject(hdc, g_hButtonFont);
 
-    std::wstring buttonText = isConnected ? L"Disconnect" : L"Connect";
-    RECT textRect = { pRect->left, centerY + 15, pRect->right, pRect->bottom };
+    std::wstring buttonText;
+    if (isConnecting) {
+        buttonText = L"Connecting...";
+    } else if (isConnected) {
+        buttonText = L"Disconnect";
+    } else {
+        buttonText = L"Connect";
+    }
+
+    RECT textRect = { pRect->left, centerY + 20, pRect->right, pRect->bottom };
     DrawTextW(hdc, buttonText.c_str(), -1, &textRect, DT_CENTER);
 
     SelectObject(hdc, oldFont);
@@ -952,23 +1042,36 @@ std::wstring FormatBytes(uint64_t bytes) {
 
 // Переключение состояния подключения
 void ToggleConnection() {
+    if (isConnecting) {
+        // Если идет подключение, игнорируем
+        return;
+    }
+
     if (isConnected) {
         if (wireguard.Disconnect()) {
             ShowMessageBoxUTF8(g_hWnd, "Отключено успешно!", "Успех", MB_OK | MB_ICONINFORMATION);
+            reconnectAttempts = 0;
         }
         else {
             ShowMessageBoxUTF8(g_hWnd, "Ошибка отключения.", "Ошибка", MB_OK | MB_ICONERROR);
         }
     }
     else {
+        isConnecting = true;
+        InvalidateRect(g_hConnectButton, NULL, TRUE);
+
+        // Подключение в отдельном потоке чтобы не блокировать UI
         if (wireguard.Connect()) {
             ShowMessageBoxUTF8(g_hWnd, "Подключение успешно!", "Успех", MB_OK | MB_ICONINFORMATION);
+            reconnectAttempts = 0;
         }
         else {
             ShowMessageBoxUTF8(g_hWnd,
                 "Ошибка подключения. Проверьте настройки и убедитесь, что WireGuard установлен.",
                 "Ошибка", MB_OK | MB_ICONERROR);
         }
+
+        isConnecting = false;
     }
 
     UpdateStatus();
@@ -1047,6 +1150,27 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             UpdateConnectionTimer();
         } else if (wParam == ID_TRAFFIC_TIMER) {
             UpdateTrafficStats();
+        } else if (wParam == ID_ANIMATION_TIMER) {
+            // Обновляем фазу анимации
+            animationPhase += 0.05f;
+            if (animationPhase >= 1.0f) animationPhase = 0.0f;
+
+            // Перерисовываем кнопку подключения
+            InvalidateRect(g_hConnectButton, NULL, FALSE);
+        } else if (wParam == ID_RECONNECT_TIMER) {
+            // Проверка соединения и автопереподключение
+            if (isConnected && !wireguard.IsConnected() && autoReconnect) {
+                // Соединение разорвалось, пытаемся переподключиться
+                reconnectAttempts++;
+                if (reconnectAttempts <= 5) {
+                    isConnecting = true;
+                    if (wireguard.Connect()) {
+                        reconnectAttempts = 0;
+                        isConnecting = false;
+                    }
+                    UpdateStatus();
+                }
+            }
         }
         break;
 
