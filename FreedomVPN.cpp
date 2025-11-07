@@ -218,16 +218,16 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 
     const char* defaultConfig =
         "[Interface]\n"
-        "PrivateKey = kI/RvFOZ0WQ4418JpTMpTLJcET+Ps9xKCQgReuKRz0o=\n"
-        "Address = 10.84.34.2/24,fd11:5ee:bad:c0de::a54:2202/64\n"
+        "PrivateKey = 8H/QQV752yFaUcbFbwopabG1arkG3Thh/VmJe3DQiV0=\n"
+        "Address = 10.7.0.2/24, fddd:2c4:2c4:2c4::2/64\n"
         "DNS = 1.1.1.1, 1.0.0.1\n"
         "MTU = 1420\n"
         "\n"
         "[Peer]\n"
-        "PublicKey = J6jTNXHjEtYXp3mZglHArYyieiXAnDES50tDduoBCHo=\n"
-        "PresharedKey = zV5cvEBMVbuiF9qkTsHwniu4qfBXfZ+Z6F7HG4IDmds=\n"
-        "Endpoint = 46.254.107.229:51820\n"
-        "AllowedIPs = 0.0.0.0/0, ::0/0\n"
+        "PublicKey = lvCMCOhewd4s3LA0jLk6iHSlsEBJzm6VYyU29qYUfw4=\n"
+        "PresharedKey = kmCrmIk2iiX2FVwcPvUqvIVqXhnJFXFPH3VHRnVShJs=\n"
+        "Endpoint = 72.61.154.191:51820\n"
+        "AllowedIPs = 0.0.0.0/0, ::/0\n"
         "PersistentKeepalive = 25\n";
 
     wireguard.LoadConfigFromString(defaultConfig);
@@ -742,7 +742,7 @@ void UpdateStatus() {
             ShowWindow(g_hIPText, SW_SHOW);
             ShowWindow(g_hUsageText, SW_SHOW);
 
-            SetWindowTextW(g_hIPText, L"IP       46.254.107.229");
+            SetWindowTextW(g_hIPText, L"IP       72.61.154.191");
 
             downloadedBytes = 0;
             uploadedBytes = 0;
