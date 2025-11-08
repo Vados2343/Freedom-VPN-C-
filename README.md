@@ -257,4 +257,3 @@ devenv FreedomVPN.sln
 **Built with C++17 • Win32 API • GDI+ • WireGuard**
 
 *Developed by Vados2343*
-```
